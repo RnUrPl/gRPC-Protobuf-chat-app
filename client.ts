@@ -2,6 +2,7 @@ import path from 'path'
 import * as grpc from '@grpc/grpc-js'
 import * as protoLoader from '@grpc/proto-loader'
 import {ProtoGrpcType} from './proto/index'
+import readline from "readline"
 //  
 
 const PORT = 8082
@@ -42,16 +43,46 @@ function onClientReady() {
     //     console.log("Communication ended")
     // })
 
-    const stream = client.TodoList((err, result) => {
-        if(err){
-            console.log(err)
-            return
-        }
-        console.log(result)
+    // const stream = client.TodoList((err, result) => {
+    //     if(err){
+    //         console.log(err)
+    //         return
+    //     }
+    //     console.log(result)
+    // })
+    // stream.write({todo: "Walk with the dog", status: "Never"})
+    // stream.write({todo: "Feed The dog", status: "Doing"})
+    // stream.write({todo: "Get the job", status: "Impossible"})
+    // stream.write({todo: "Rizz up", status: "Done"})
+    // stream.end()
+
+    const rl = readline.createInterface({
+        input: process.stdin,
+        output: process.stdout
     })
-    stream.write({todo: "Walk with the dog", status: "Never"})
-    stream.write({todo: "Feed The dog", status: "Doing"})
-    stream.write({todo: "Get the job", status: "Impossible"})
-    stream.write({todo: "Rizz up", status: "Done"})
-    stream.end()
+
+    const username = process.argv[2]
+    if(!username) console.error("No username, can't join chat"), process.exit()
+    const metadata = new grpc.Metadata()
+    metadata.set("username", username)
+    const call = client.Chat(metadata)
+
+    call.write({
+        message: "Register"
+    })
+
+    call.on("data", (chunk) => {
+        console.log(`${chunk.username} ==> ${chunk.message}`)
+    })
+
+    rl.on("line", (line) => {
+        if(line === "quit"){
+            call.end()
+            return 
+        }else{
+            call.write({
+                message: line
+            })
+        }
+    })
 }

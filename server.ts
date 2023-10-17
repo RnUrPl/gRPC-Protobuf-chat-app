@@ -5,6 +5,8 @@ import {ProtoGrpcType} from './proto/index'
 import { RandomHandlers} from './proto/indexPackage/Random'
 import { TodoResponse } from './proto/indexPackage/TodoResponse'
 import { TodoRequest } from './proto/indexPackage/TodoRequest'
+import { ChatRequest } from './proto/indexPackage/ChatRequest'
+import { ChatResponse } from './proto/indexPackage/ChatResponse'
 
 const PORT = 8082
 const PROTO_FILE = './proto/index.proto'
@@ -29,10 +31,13 @@ function main(){
 }
 
 const todoList: TodoResponse = {todos:[]}
+const callObjByUserName = new Map<string, grpc.ServerDuplexStream<ChatRequest, ChatResponse>>()
+
+
 function getServer(){
     const server = new grpc.Server()
     server.addService(indexPackage.Random.service, {
-        "PingPong" : (req,res) =>{
+        PingPong : (req,res) =>{
             console.log(req.request)
             res(null, {message: "Pong"})
         },
@@ -61,6 +66,45 @@ function getServer(){
              call.on("end", () => {
                 callback(null,{todos: todoList.todos})
              })
+        },
+        Chat: (call) => {
+            call.on("data", (req) => {
+                const username = call.metadata.get('username')[0] as string 
+                const msg = req.message
+                console.log(username, req.message)
+                for(let[user, userCall] of callObjByUserName){
+                    if(username !== user){
+                        userCall.write({
+                            username: username, 
+                            message: msg
+                        })
+                    }
+                }
+
+                if(callObjByUserName.get(username) === undefined){
+                    callObjByUserName.set(username,call)
+                }
+            })
+
+            call.on("end", () => {
+                const username = call.metadata.get('username')[0] as string
+                callObjByUserName.delete(username)
+                for(let[user, userCall] of callObjByUserName){
+                        userCall.write({
+                            username: username, 
+                            message: "left the chat"
+                        })
+
+                }
+                console.log(`${username} is ending their chat conversation`)
+                call.write({
+                    username: "Server",
+                    message: `See you later ${username}`
+                })
+
+                call.end()
+            })
+        
         }
     }  as RandomHandlers)
 
